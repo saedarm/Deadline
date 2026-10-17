@@ -1,0 +1,22 @@
+[application]
+name = "deadline"
+asset_dir = "assets"
+
+[bundle]
+identifier = "com.saedarm.deadline"
+publisher = "S.A. Routh"
+icon = ["assets/icon.png", "assets/icon.ico"]
+short_description = "A todo app laid out as the morning paper."
+
+[android]
+min_sdk = 26
+target_sdk = 35
+# For testing against a server on your LAN over plain http, uncomment:
+# application = { uses_cleartext_traffic = true }
+
+# Release signing: CI inserts a [bundle.android] section from GitHub secrets.
+# (dx 0.7.10 reads [bundle.android]; the newer [android.signing] name isn't wired up yet.)
+# The keystore path is relative to this folder. Never commit the keystore or passwords.
+
+[permissions]
+notifications = { description = "Reminders when a deadline comes up" }

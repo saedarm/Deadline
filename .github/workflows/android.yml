@@ -1,0 +1,79 @@
+# Builds the signed Android APK and attaches it to a GitHub Release.
+# Push a tag (git tag v0.1.0 && git push --tags) or run it by hand from the Actions tab.
+#
+# Repo settings > Secrets and variables > Actions:
+#   Variables: DEADLINE_SERVER_URL   e.g. https://deadline-saedarm.fly.dev
+#   Secrets:   DEADLINE_TOKEN        same value as on Fly
+#              ANDROID_KEYSTORE_B64  base64 of deadline.jks
+#              ANDROID_KEYSTORE_PASSWORD
+#              ANDROID_KEY_PASSWORD
+name: Android APK
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  apk:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-linux-android
+
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Install dx
+        run: |
+          curl -sSfL https://github.com/DioxusLabs/dioxus/releases/download/v0.7.10/dx-x86_64-unknown-linux-gnu.tar.gz \
+            | sudo tar xz -C /usr/local/bin dx
+          dx --version
+
+      - name: Signing key
+        env:
+          KEYSTORE_B64: ${{ secrets.ANDROID_KEYSTORE_B64 }}
+          KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          echo "$KEYSTORE_B64" | base64 -d > deadline.jks
+          cat >> Dioxus.toml <<EOF
+
+          [bundle.android]
+          jks_file = "deadline.jks"
+          jks_password = "$KEYSTORE_PASSWORD"
+          key_alias = "deadline"
+          key_password = "$KEY_PASSWORD"
+          EOF
+
+      - name: Build APK
+        env:
+          DEADLINE_SERVER_URL: ${{ vars.DEADLINE_SERVER_URL }}
+          DEADLINE_TOKEN: ${{ secrets.DEADLINE_TOKEN }}
+        run: |
+          export NDK_HOME="$ANDROID_NDK_LATEST_HOME"
+          dx bundle --android --release --target aarch64-linux-android \
+            --fullstack false --features mobile --package-types apk --out-dir dist
+          mv dist/app-release.apk "dist/deadline-${GITHUB_REF_NAME}.apk"
+
+      - name: Attach to release
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist/deadline-*.apk
+
+      - name: Keep as a build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: deadline-apk
+          path: dist/deadline-*.apk
